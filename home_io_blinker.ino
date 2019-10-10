@@ -1,54 +1,59 @@
-#include <Wire.h>
+const char* serial_number = "19dc0663a1a14c22b0a73d2e35ee60ae";
+const char* type = "blinker\r\n";
 
-int SLAVE_ADDRESS = 0x04;
-int ledPin = 13;
-int analogPin = A0;
-
-struct BlinkerState {
-    bool enabled = true;
-    int interval = 1000;
+enum ProtocolState {
+  initial, ack_conn, ack_serial, ack_type, sending
 };
 
-static BlinkerState state;
-
-enum Command {
-    ENABLE, DISABLE, SWITCH_INTERVAL
-};
+ProtocolState state;
 
 void setup() {
-    pinMode(ledPin, OUTPUT);
-    Wire.begin(SLAVE_ADDRESS);
-    Wire.onReceive(handleReceive);
-    Wire.onRequest(handleRequest);
+  state = initial;
+  Serial.begin(9600);
 }
 
 void loop() {
-    state.enabled = false;
-    if (state.enabled) {
-        digitalWrite(ledPin, HIGH);
-        delay(state.interval);
-        digitalWrite(ledPin, LOW);
-        delay(state.interval);
-    }
+  if (state != sending) {
+    initConnection();
+  } else {
+    byte data = 0xFF;
+    Serial.write(data);
+    delay(200);
+  }
 }
 
-void handleReceive(int n) {
-    byte command = Wire.read();
-    switch (command) {
-        case ENABLE:
-            state.enabled = true;
-            break;
-        case DISABLE:
-            state.enabled = false;
-            break;
-        case SWITCH_INTERVAL:
-            state.interval = Wire.read();
-            break;
-        default:
-            break;
-    }
-}
-
-void handleRequest() {
-    
+void initConnection() {
+  String msg;
+  switch (state) {
+    case initial:
+      Serial.print("ACK");
+      msg = Serial.readString();
+      if (msg == "ACK_CONN") {
+        state = ack_conn;
+      } else if (msg == "NACK") {
+        state = initial;
+      }
+      break;
+    case ack_conn:
+      Serial.print(serial_number);
+      msg = Serial.readString();
+      if (msg == "ACK_SERIAL") {
+        state = ack_serial;
+      } else if (msg == "NACK") {
+        state = initial;
+      }
+      break;
+    case ack_serial:
+      Serial.print(type);
+      msg = Serial.readString();
+      if (msg == "ACK_TYPE") {
+        state = ack_type;
+      } else if (msg == "NACK") {
+        state = initial;
+      }
+      break;
+    case ack_type:
+      state = sending;
+      break;
+  }
 }
